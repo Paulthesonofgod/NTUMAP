@@ -160,12 +160,12 @@ public class RoomBookingActivity extends AppCompatActivity {
     
     // Room data class
     public static class Room {
-        private String name;
-        private String location;
-        private int maxCapacity;
+        private final String name;
+        private final String location;
+        private final int maxCapacity;
         private int currentOccupancy;
-        private String type;
-        private String description;
+        private final String type;
+        private final String description;
         
         public Room(String name, String location, int maxCapacity, int currentOccupancy, String type, String description) {
             this.name = name;
@@ -213,7 +213,7 @@ public class RoomBookingActivity extends AppCompatActivity {
         @Override
         public View getView(int position, View convertView, android.view.ViewGroup parent) {
             View view = super.getView(position, convertView, parent);
-            TextView textView = (TextView) view.findViewById(android.R.id.text1);
+            TextView textView = view.findViewById(android.R.id.text1);
             
             Room room = rooms.get(position);
             textView.setText(room.toString());

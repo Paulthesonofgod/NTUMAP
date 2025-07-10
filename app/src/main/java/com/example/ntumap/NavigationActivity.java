@@ -1,6 +1,7 @@
 package com.example.ntumap;
 
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.location.Location;
 import android.os.Bundle;
 import android.widget.Button;
@@ -198,14 +199,57 @@ public class NavigationActivity extends AppCompatActivity implements OnMapReadyC
     
     private void enableAccessibilityMode() {
         // Enable accessibility features for navigation
-        Toast.makeText(this, "Accessibility mode enabled. Voice guidance activated.", 
-                      Toast.LENGTH_SHORT).show();
+        SharedPreferences preferences = getSharedPreferences("AccessibilitySettings", MODE_PRIVATE);
         
-        // In a real app, this would:
-        // - Enable voice guidance
-        // - Increase text size
-        // - Enable high contrast mode
-        // - Activate screen reader support
+        if (AccessibilityActivity.isVoiceGuidanceEnabled(preferences)) {
+            // Enable voice guidance for navigation
+            Toast.makeText(this, "Voice guidance enabled for navigation", Toast.LENGTH_SHORT).show();
+        }
+        
+        if (AccessibilityActivity.isVibrationFeedbackEnabled(preferences)) {
+            // Enable vibration feedback for turns
+            Toast.makeText(this, "Vibration feedback enabled for navigation", Toast.LENGTH_SHORT).show();
+        }
+        
+        // Show accessibility options dialog
+        showAccessibilityOptions();
+    }
+    
+    private void showAccessibilityOptions() {
+        String[] options = {"Voice Guidance", "Vibration Feedback", "High Contrast Route", "Large Text"};
+        boolean[] checkedItems = {
+            AccessibilityActivity.isVoiceGuidanceEnabled(getSharedPreferences("AccessibilitySettings", MODE_PRIVATE)),
+            AccessibilityActivity.isVibrationFeedbackEnabled(getSharedPreferences("AccessibilitySettings", MODE_PRIVATE)),
+            AccessibilityActivity.isHighContrastEnabled(getSharedPreferences("AccessibilitySettings", MODE_PRIVATE)),
+            AccessibilityActivity.isLargeTextEnabled(getSharedPreferences("AccessibilitySettings", MODE_PRIVATE))
+        };
+        
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Navigation Accessibility")
+            .setMultiChoiceItems(options, checkedItems, (dialog, which, isChecked) -> {
+                // Handle accessibility option changes
+                SharedPreferences.Editor editor = getSharedPreferences("AccessibilitySettings", MODE_PRIVATE).edit();
+                switch (which) {
+                    case 0: // Voice Guidance
+                        editor.putBoolean("voice_guidance", isChecked);
+                        break;
+                    case 1: // Vibration Feedback
+                        editor.putBoolean("vibration_feedback", isChecked);
+                        break;
+                    case 2: // High Contrast
+                        editor.putBoolean("high_contrast", isChecked);
+                        break;
+                    case 3: // Large Text
+                        editor.putBoolean("large_text", isChecked);
+                        break;
+                }
+                editor.apply();
+            })
+            .setPositiveButton("Apply", (dialog, which) -> {
+                Toast.makeText(this, "Accessibility settings applied to navigation", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
     
     // AI-powered route optimization

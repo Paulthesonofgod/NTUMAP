@@ -2,10 +2,9 @@ package com.example.ntumap;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.location.Location;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -26,9 +25,12 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity implements OnMapReadyCallback {
@@ -51,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     
     // Occupancy data (simulated for demo)
     private Map<String, RoomOccupancy> roomOccupancyMap;
+    private Map<Marker, String> markerToRoomMap;
     
     // NTU Clifton Campus coordinates
     private static final LatLng NTU_CLIFTON = new LatLng(52.9068, -1.1878);
@@ -60,6 +63,9 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
+        
+        // Check if this is the first launch
+        checkFirstLaunch();
         
         // Initialize UI components
         initializeViews();
@@ -82,6 +88,22 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
+    }
+    
+    private void checkFirstLaunch() {
+        SharedPreferences preferences = getSharedPreferences("AppSettings", MODE_PRIVATE);
+        boolean isFirstLaunch = preferences.getBoolean("is_first_launch", true);
+        
+        if (isFirstLaunch) {
+            // Show onboarding
+            Intent intent = new Intent(this, OnboardingActivity.class);
+            startActivity(intent);
+            
+            // Mark as not first launch
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putBoolean("is_first_launch", false);
+            editor.apply();
+        }
     }
     
     private void initializeViews() {
@@ -141,6 +163,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     
     private void initializeOccupancyData() {
         roomOccupancyMap = new HashMap<>();
+        markerToRoomMap = new HashMap<>();
         
         // Simulate real-time occupancy data for NTU buildings
         roomOccupancyMap.put("Room A", new RoomOccupancy("Room A", 12, 20, "Lecture Hall"));
@@ -186,10 +209,20 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         
         // Add room markers with occupancy data
         addRoomMarkers();
+        
+        // Set marker click listener for navigation
+        mMap.setOnMarkerClickListener(marker -> {
+            String roomName = markerToRoomMap.get(marker);
+            if (roomName != null) {
+                showRoomDetails(roomName);
+                return true; // Consume the event
+            }
+            return false; // Let default behavior handle it
+        });
     }
     
     private void addRoomMarkers() {
-        // Add markers for different buildings/rooms on campus
+        // Add markers for different buildings/rooms on campus with larger tap areas
         LatLng[] roomLocations = {
             new LatLng(52.9068, -1.1878), // Main building
             new LatLng(52.9070, -1.1880), // Library
@@ -201,19 +234,46 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         String[] roomNames = {"Main Building", "Library", "Computer Lab", "Cafeteria", "Gym"};
         
         for (int i = 0; i < roomLocations.length; i++) {
-            RoomOccupancy occupancy = roomOccupancyMap.get(roomNames[i]);
-            if (occupancy != null) {
-                String snippet = String.format("Occupancy: %d/%d (%s)", 
-                    occupancy.getCurrentOccupancy(), 
-                    occupancy.getMaxCapacity(),
-                    occupancy.getRoomType());
-                
-                mMap.addMarker(new MarkerOptions()
-                        .position(roomLocations[i])
-                        .title(roomNames[i])
-                        .snippet(snippet));
+            Marker marker = mMap.addMarker(new MarkerOptions()
+                    .position(roomLocations[i])
+                    .title(roomNames[i])
+                    .snippet("Tap for details and navigation"));
+            
+            if (marker != null) {
+                markerToRoomMap.put(marker, roomNames[i]);
             }
         }
+    }
+    
+    private void showRoomDetails(String roomName) {
+        // Show room details and navigation options
+        RoomOccupancy occupancy = roomOccupancyMap.get(roomName);
+        if (occupancy != null) {
+            String message = String.format("%s\nOccupancy: %d/%d (%.1f%%)\nType: %s", 
+                roomName, 
+                occupancy.getCurrentOccupancy(), 
+                occupancy.getMaxCapacity(),
+                occupancy.getOccupancyPercentage(),
+                occupancy.getRoomType());
+            
+            // Show dialog with navigation option
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Room Details")
+                .setMessage(message)
+                .setPositiveButton("Navigate", (dialog, which) -> {
+                    startNavigation(roomName);
+                })
+                .setNegativeButton("Close", null)
+                .show();
+        }
+    }
+    
+    private void startNavigation(String destination) {
+        Intent intent = new Intent(this,
+                NavigationActivity.class);
+        intent.putExtra("destination", destination);
+        intent.putExtra("ai_route", false);
+        startActivity(intent);
     }
     
     private void requestPermissions() {
@@ -235,19 +295,64 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
     
     private void searchLocation(String query) {
-        // TODO: Implement location search with Google Places API
+        // Implement search functionality with visual feedback
         Toast.makeText(this, "Searching for: " + query, Toast.LENGTH_SHORT).show();
         
-        // For now, just show a simple search result
-        if (query.toLowerCase().contains("room") || query.toLowerCase().contains("classroom")) {
-            Intent intent = new Intent(this, RoomBookingActivity.class);
-            intent.putExtra("search_query", query);
-            startActivity(intent);
+        // Highlight matching markers on the map
+        if (mMap != null) {
+            // Clear previous highlights
+            mMap.clear();
+            
+            // Re-add all markers
+            addRoomMarkers();
+            
+            // Find and highlight matching markers
+            for (Map.Entry<Marker, String> entry : markerToRoomMap.entrySet()) {
+                Marker marker = entry.getKey();
+                String roomName = entry.getValue();
+                
+                if (roomName.toLowerCase().contains(query.toLowerCase())) {
+                    // Highlight the matching marker
+                    marker.setTitle("📍 " + roomName + " (Found!)");
+                    marker.showInfoWindow();
+                    
+                    // Move camera to the found location
+                    mMap.animateCamera(com.google.android.gms.maps.CameraUpdateFactory.newLatLngZoom(
+                        marker.getPosition(), 17));
+                    
+                    // Show room details
+                    showRoomDetails(roomName);
+                    return;
+                }
+            }
+            
+            // If no exact match found, show suggestions
+            showSearchSuggestions(query);
+        }
+    }
+    
+    private void showSearchSuggestions(String query) {
+        List<String> suggestions = new ArrayList<>();
+        
+        for (String roomName : roomOccupancyMap.keySet()) {
+            if (roomName.toLowerCase().contains(query.toLowerCase())) {
+                suggestions.add(roomName);
+            }
+        }
+        
+        if (!suggestions.isEmpty()) {
+            String[] suggestionArray = suggestions.toArray(new String[0]);
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Search Results")
+                .setItems(suggestionArray, (dialog, which) -> {
+                    String selectedRoom = suggestionArray[which];
+                    searchEditText.setText(selectedRoom);
+                    searchLocation(selectedRoom);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
         } else {
-            // Start navigation
-            Intent intent = new Intent(this, NavigationActivity.class);
-            intent.putExtra("destination", query);
-            startActivity(intent);
+            Toast.makeText(this, "No locations found matching: " + query, Toast.LENGTH_SHORT).show();
         }
     }
     
@@ -273,8 +378,75 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
     
     private void showFilterDialog() {
-        // TODO: Implement filter dialog for room types
-        Toast.makeText(this, "Filter options coming soon!", Toast.LENGTH_SHORT).show();
+        // Implement filter dialog for room types
+        String[] roomTypes = {"All", "Lecture Hall", "Study Room", "Lab", "Dining", "Recreation"};
+        boolean[] checkedItems = {true, false, false, false, false, false};
+        
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Filter by Room Type")
+            .setMultiChoiceItems(roomTypes, checkedItems, (dialog, which, isChecked) -> {
+                // Handle filter selection
+                if (which == 0) { // "All" option
+                    // If "All" is selected, uncheck others
+                    if (isChecked) {
+                        for (int i = 1; i < checkedItems.length; i++) {
+                            checkedItems[i] = false;
+                        }
+                    }
+                } else {
+                    // If specific type is selected, uncheck "All"
+                    checkedItems[0] = false;
+                }
+            })
+            .setPositiveButton("Apply", (dialog, which) -> {
+                applyFilters(roomTypes, checkedItems);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+    
+    private void applyFilters(String[] roomTypes, boolean[] checkedItems) {
+        // Apply selected filters to the map
+        if (mMap != null) {
+            mMap.clear();
+            
+            // Re-add markers based on filters
+            for (Map.Entry<Marker, String> entry : markerToRoomMap.entrySet()) {
+                Marker marker = entry.getKey();
+                String roomName = entry.getValue();
+                RoomOccupancy occupancy = roomOccupancyMap.get(roomName);
+                
+                if (occupancy != null) {
+                    boolean shouldShow = false;
+                    
+                    if (checkedItems[0]) { // "All" is selected
+                        shouldShow = true;
+                    } else {
+                        // Check if room type matches any selected filter
+                        for (int i = 1; i < checkedItems.length; i++) {
+                            if (checkedItems[i] && occupancy.getRoomType().equals(roomTypes[i])) {
+                                shouldShow = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (shouldShow) {
+                        // Re-add the marker
+                        Marker newMarker = mMap.addMarker(new MarkerOptions()
+                                .position(marker.getPosition())
+                                .title(roomName)
+                                .snippet("Tap for details and navigation"));
+                        
+                        if (newMarker != null) {
+                            markerToRoomMap.put(newMarker, roomName);
+                        }
+                    }
+                }
+            }
+            
+            Toast.makeText(this, "Filters applied successfully", Toast.LENGTH_SHORT).show();
+        }
     }
     
     private void updateOccupancyDisplay() {
@@ -288,10 +460,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     
     // Room occupancy data class
     private static class RoomOccupancy {
-        private String name;
-        private int currentOccupancy;
-        private int maxCapacity;
-        private String roomType;
+        private final String name;
+        private final int currentOccupancy;
+        private final int maxCapacity;
+        private final String roomType;
         
         public RoomOccupancy(String name, int currentOccupancy, int maxCapacity, String roomType) {
             this.name = name;

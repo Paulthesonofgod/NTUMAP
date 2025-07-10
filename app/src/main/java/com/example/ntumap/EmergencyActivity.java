@@ -254,10 +254,10 @@ public class EmergencyActivity extends AppCompatActivity implements OnMapReadyCa
     
     // Emergency Alert data class
     public static class EmergencyAlert {
-        private String title;
-        private String description;
-        private String priority;
-        private String timeAgo;
+        private final String title;
+        private final String description;
+        private final String priority;
+        private final String timeAgo;
         
         public EmergencyAlert(String title, String description, String priority, String timeAgo) {
             this.title = title;
@@ -290,7 +290,7 @@ public class EmergencyActivity extends AppCompatActivity implements OnMapReadyCa
         @Override
         public android.view.View getView(int position, android.view.View convertView, android.view.ViewGroup parent) {
             android.view.View view = super.getView(position, convertView, parent);
-            TextView textView = (TextView) view.findViewById(android.R.id.text1);
+            TextView textView = view.findViewById(android.R.id.text1);
             
             EmergencyAlert alert = alerts.get(position);
             textView.setText(alert.toString());

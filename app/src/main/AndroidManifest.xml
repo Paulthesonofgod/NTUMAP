@@ -48,6 +48,9 @@
         <activity
             android:name=".EmergencyActivity"
             android:exported="false" />
+        <activity
+            android:name=".OnboardingActivity"
+            android:exported="false" />
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAKnh64E885WW4NbuheHtr7CQNdpnXuliA"/>
